@@ -1,91 +1,109 @@
 import socket
-import os  # Necesario para comprobar si el archivo existe y su tamaño
+import threading
+import tkinter as tk
+from tkinter import ttk, scrolledtext
 
-# --- Constantes ---
-HOST = '127.0.0.1'  # Cambia esto por la IP del servidor
-PORT = 65432
-BUFFER_SIZE = 4096  # 4KB
-
-def enviar_archivo(s, ruta_archivo):
-    """ Función dedicada a enviar un archivo """
-    
-    # 1. Comprobar si el archivo existe
-    if not os.path.exists(ruta_archivo):
-        print(f"Error: El archivo '{ruta_archivo}' no existe.")
-        return
+class Cliente:
+    def __init__(self, nombre_cliente):
+        self.nombre_cliente = nombre_cliente
+        self.host_servidor = 'localhost'  # Cambiar por IP del servidor
+        self.port_servidor = 5000
+        self.socket_cliente = None
         
-    # 2. Obtener nombre y tamaño
-    filename = os.path.basename(ruta_archivo)
-    filesize = os.path.getsize(ruta_archivo)
-    
-    # 3. Enviar el "comando" al servidor
-    print(f"Enviando comando: enviar_archivo::{filename}::{filesize}")
-    s.sendall(f"enviar_archivo::{filename}::{filesize}".encode('utf-8'))
-    
-    # 4. Esperar la confirmación del servidor ("OK_LISTO")
-    respuesta_servidor = s.recv(1024).decode('utf-8')
-    
-    if respuesta_servidor == "OK_LISTO":
-        print("Servidor listo. Empezando a enviar el archivo...")
+        self.crear_interfaz()
         
-        # 5. Enviar el archivo en trozos (chunks)
-        bytes_enviados = 0
+    def crear_interfaz(self):
+        self.ventana = tk.Tk()
+        self.ventana.title(f"Cliente - {self.nombre_cliente}")
+        self.ventana.geometry("500x400")
+        
+        # Frame de conexión
+        frame_conexion = ttk.Frame(self.ventana)
+        frame_conexion.pack(pady=10)
+        
+        ttk.Label(frame_conexion, text="Servidor:").pack(side=tk.LEFT)
+        self.servidor_entry = ttk.Entry(frame_conexion, width=15)
+        self.servidor_entry.insert(0, self.host_servidor)
+        self.servidor_entry.pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(frame_conexion, text="Conectar", 
+                  command=self.conectar_servidor).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(frame_conexion, text="Desconectar", 
+                  command=self.desconectar_servidor).pack(side=tk.LEFT, padx=5)
+        
+        # Estado
+        self.estado_label = ttk.Label(self.ventana, text="Desconectado")
+        self.estado_label.pack(pady=5)
+        
+        # Log
+        ttk.Label(self.ventana, text="Mensajes:").pack(pady=5)
+        self.log_area = scrolledtext.ScrolledText(self.ventana, height=15)
+        self.log_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Entrada de mensajes
+        frame_mensaje = ttk.Frame(self.ventana)
+        frame_mensaje.pack(fill=tk.X, padx=10, pady=5)
+        
+        self.mensaje_entry = ttk.Entry(frame_mensaje)
+        self.mensaje_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.mensaje_entry.bind('<Return>', self.enviar_mensaje)
+        
+        ttk.Button(frame_mensaje, text="Enviar", 
+                  command=self.enviar_mensaje).pack(side=tk.RIGHT, padx=5)
+        
+    def log(self, mensaje):
+        self.log_area.insert(tk.END, f"{mensaje}\n")
+        self.log_area.see(tk.END)
+        
+    def conectar_servidor(self):
         try:
-            with open(ruta_archivo, 'rb') as f: # Abrir en modo "Read Binary" (rb)
-                while bytes_enviados < filesize:
-                    data = f.read(BUFFER_SIZE)
-                    if not data:
-                        break # Se terminó de leer el archivo
-                    
-                    s.sendall(data)
-                    bytes_enviados += len(data)
-                    
-            print(f"Archivo enviado. Esperando confirmación final...")
+            self.host_servidor = self.servidor_entry.get()
+            self.socket_cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket_cliente.connect((self.host_servidor, self.port_servidor))
             
-            # 6. Esperar confirmación final
-            confirmacion_final = s.recv(1024).decode('utf-8')
-            print(f"[Servidor] {confirmacion_final}")
+            # Enviar identificación
+            self.socket_cliente.send(self.nombre_cliente.encode())
+            
+            self.estado_label.config(text=f"Conectado a {self.host_servidor}:{self.port_servidor}")
+            self.log("Conectado al servidor")
+            
+            # Hilo para recibir mensajes
+            threading.Thread(target=self.recibir_mensajes, daemon=True).start()
             
         except Exception as e:
-            print(f"Error durante el envío: {e}")
+            self.log(f"Error al conectar: {e}")
             
-    else:
-        print(f"El servidor no pudo preparar la recepción: {respuesta_servidor}")
-
-
-# --- Flujo Principal del Cliente ---
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    print(f"Conectando a {HOST}:{PORT}...")
-    s.connect((HOST, PORT))
-    print("¡Conectado!")
-    
-    bienvenida = s.recv(1024).decode('utf-8')
-    print(f"[Servidor] {bienvenida}")
-
-    try:
+    def recibir_mensajes(self):
         while True:
-            mensaje = input("Escribe tu mensaje (o 'enviar_archivo <ruta>'): ")
-            
-            # --- NUEVA LÓGICA DE COMANDOS ---
-            if mensaje.startswith('enviar_archivo '):
-                # Obtenemos la ruta del archivo (ej. "mi_archivo.txt")
-                ruta_archivo = mensaje.split(" ", 1)[1]
-                enviar_archivo(s, ruta_archivo)
-            
-            # --- LÓGICA DE CHAT (como antes) ---
-            elif mensaje.strip().lower() == 'adios':
-                s.sendall(mensaje.encode('utf-8'))
-                print("Desconectando...")
+            try:
+                mensaje = self.socket_cliente.recv(1024).decode()
+                if not mensaje:
+                    break
+                self.log(f"Servidor: {mensaje}")
+            except:
                 break
-            else:
-                # Es un mensaje de chat normal
-                s.sendall(mensaje.encode('utf-8'))
-                # Esperamos la respuesta (eco) del servidor
-                data = s.recv(1024)
-                print(f"[Servidor] {data.decode('utf-8')}")
+                
+    def enviar_mensaje(self, event=None):
+        mensaje = self.mensaje_entry.get()
+        if mensaje and self.socket_cliente:
+            try:
+                self.socket_cliente.send(mensaje.encode())
+                self.log(f"Tú: {mensaje}")
+                self.mensaje_entry.delete(0, tk.END)
+            except Exception as e:
+                self.log(f"Error al enviar: {e}")
+                
+    def desconectar_servidor(self):
+        if self.socket_cliente:
+            self.socket_cliente.close()
+            self.estado_label.config(text="Desconectado")
+            self.log("Desconectado del servidor")
             
-    except KeyboardInterrupt:
-        print("\nCerrando conexión.")
-    finally:
-        s.close()
+    def ejecutar(self):
+        self.ventana.mainloop()
+
+if __name__ == "__main__":
+    # Para probar, puedes cambiar el nombre: Cliente("Equipo1") o Cliente("Equipo2")
+    cliente = Cliente("Equipo1")
+    cliente.ejecutar()
