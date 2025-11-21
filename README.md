@@ -1,6 +1,6 @@
 # Manual de Usuario - Aplicación de Control Remoto Escolar
 
-Esta aplicación permite conectar 3 dispositivos (1 Servidor y 2 Clientes) para realizar tareas de monitoreo y control remoto.
+Esta aplicación permite conectar 3 dispositivos (1 Servidor y 2 Clientes) para realizar tareas de monitoreo y control remoto. SYN
 
 ## Requisitos Previos
 1. **Python 3.x** instalado en todos los equipos.
