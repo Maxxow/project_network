@@ -1,7 +1,7 @@
 import socket
 import threading
 import tkinter as tk
-from tkinter import ttk, scrolledtext, simpledialog, Toplevel, Label
+from tkinter import ttk, scrolledtext, simpledialog, Toplevel, Label, filedialog, messagebox
 import json
 import base64
 import io
@@ -62,6 +62,16 @@ class Servidor:
         ttk.Label(frame_left, text="Log de Eventos").pack(anchor=tk.W, pady=(10,0))
         self.log_area = scrolledtext.ScrolledText(frame_left, height=10)
         self.log_area.pack(fill=tk.BOTH, expand=True, padx=5, pady=2)
+
+        # Chat del Servidor
+        frame_chat = ttk.LabelFrame(frame_left, text="Chat del Servidor")
+        frame_chat.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.chat_entry = ttk.Entry(frame_chat)
+        self.chat_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5, pady=5)
+        self.chat_entry.bind('<Return>', self.enviar_mensaje_chat_servidor)
+        
+        ttk.Button(frame_chat, text="Enviar", command=self.enviar_mensaje_chat_servidor).pack(side=tk.RIGHT, padx=5)
         
         # Panel Derecho: Controles
         frame_right = ttk.LabelFrame(paned, text="Panel de Control")
@@ -89,8 +99,15 @@ class Servidor:
         lbl_net.pack(fill=tk.X, padx=5, pady=5)
         
         ttk.Button(lbl_net, text="Bloquear Web (3.9)", command=self.bloquear_web_dialogo).pack(fill=tk.X, padx=2, pady=2)
+        ttk.Button(lbl_net, text="Desbloquear Web", command=self.desbloquear_web_dialogo).pack(fill=tk.X, padx=2, pady=2)
         ttk.Button(lbl_net, text="Bloquear Ping (3.10)", command=lambda: self.control_ping("bloquear")).pack(fill=tk.X, padx=2, pady=2)
         ttk.Button(lbl_net, text="Permitir Ping (3.10)", command=lambda: self.control_ping("permitir")).pack(fill=tk.X, padx=2, pady=2)
+
+        # Grupo 4: Transferencia
+        lbl_trans = ttk.LabelFrame(frame_right, text="Transferencia de Archivos")
+        lbl_trans.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Button(lbl_trans, text="Adjuntar Archivo", command=self.enviar_archivo_dialogo).pack(fill=tk.X, padx=2, pady=2)
         
     def log(self, mensaje):
         self.log_area.insert(tk.END, f"{mensaje}\n")
@@ -189,7 +206,16 @@ class Servidor:
                 self.clientes[cid]['socket'].send(msg.encode())
         except Exception as e:
             self.log(f"❌ Error enviando a {cid}: {e}")
+            self.log(f"❌ Error enviando a {cid}: {e}")
 
+    def enviar_mensaje_chat_servidor(self, event=None):
+        mensaje = self.chat_entry.get().strip()
+        if mensaje:
+            self.log(f"💬 Servidor: {mensaje}")
+            # Broadcast a todos
+            for cid, info in self.clientes.items():
+                self.enviar_json(cid, {'tipo': 'chat_remoto', 'de': 'Servidor', 'contenido': mensaje})
+            self.chat_entry.delete(0, tk.END)
     # --- Comandos de Control ---
     def get_cliente_seleccionado(self):
         sel = self.lista_clientes.curselection()
@@ -244,6 +270,37 @@ class Servidor:
         url = simpledialog.askstring("Bloquear Web", "URL a bloquear (ej: www.facebook.com):")
         if url:
             self.enviar_comando_simple("bloquear_web", {'url': url})
+
+    def desbloquear_web_dialogo(self):
+        url = simpledialog.askstring("Desbloquear Web", "URL a desbloquear (ej: www.facebook.com):")
+        if url:
+            self.enviar_comando_simple("desbloquear_web", {'url': url})
+
+    def enviar_archivo_dialogo(self):
+        filepath = filedialog.askopenfilename()
+        if filepath:
+            threading.Thread(target=self.enviar_archivo, args=(filepath,), daemon=True).start()
+
+    def enviar_archivo(self, filepath):
+        try:
+            import os
+            nombre_archivo = os.path.basename(filepath)
+            with open(filepath, 'rb') as f:
+                contenido = base64.b64encode(f.read()).decode()
+                
+            datos = {
+                'tipo': 'archivo',
+                'nombre': nombre_archivo,
+                'contenido': contenido
+            }
+            
+            # Broadcast a todos los clientes
+            for cid in self.clientes:
+                self.enviar_json(cid, datos)
+                
+            self.log(f"📂 Archivo enviado a todos: {nombre_archivo}")
+        except Exception as e:
+            self.log(f"❌ Error enviando archivo: {e}")
 
     def control_ping(self, accion):
         self.enviar_comando_simple("control_ping", {'accion': accion})

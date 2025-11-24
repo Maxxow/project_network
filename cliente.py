@@ -187,6 +187,9 @@ class Cliente:
             
         elif tipo == 'bloquear_web':
             self.bloquear_web(datos.get('url'))
+
+        elif tipo == 'desbloquear_web':
+            self.desbloquear_web(datos.get('url'))
             
         elif tipo == 'control_ping':
             self.controlar_ping(datos.get('accion'))
@@ -337,6 +340,29 @@ class Cliente:
                     self.log("⚠️ El sitio ya estaba bloqueado")
         except PermissionError:
             self.log("❌ Error: Se requieren permisos de administrador para bloquear webs")
+
+    def desbloquear_web(self, url):
+        if not url: return
+        self.log(f"🔓 Desbloqueando acceso a {url}")
+        
+        hosts_path = r"C:\Windows\System32\drivers\etc\hosts" if platform.system() == "Windows" else "/etc/hosts"
+        redirect = "127.0.0.1"
+        
+        try:
+            lines = []
+            with open(hosts_path, 'r') as file:
+                lines = file.readlines()
+            
+            with open(hosts_path, 'w') as file:
+                for line in lines:
+                    if url not in line:
+                        file.write(line)
+            
+            self.log("✅ Sitio desbloqueado (requiere admin)")
+        except PermissionError:
+            self.log("❌ Error: Se requieren permisos de administrador para desbloquear webs")
+        except Exception as e:
+            self.log(f"❌ Error al desbloquear: {e}")
 
     # --- Funcionalidad 3.10: Ping ---
     def controlar_ping(self, accion):
