@@ -1,7 +1,7 @@
 import socket
 import threading
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox, filedialog
+from tkinter import ttk, scrolledtext, messagebox, filedialog, Toplevel, Label
 import json
 import platform
 import os
@@ -10,7 +10,7 @@ import subprocess
 import time
 import base64
 import io
-from PIL import Image
+from PIL import Image, ImageTk
 import mss
 from pynput import keyboard, mouse
 
@@ -25,13 +25,14 @@ class Cliente:
         self.keyboard_listener = None
         self.mouse_listener = None
         self.compartiendo_pantalla = False
+        self.ventana_remota = None # Para ver al servidor (3.5) o a otro cliente
         
         self.crear_interfaz()
         
     def crear_interfaz(self):
         self.ventana = tk.Tk()
         self.ventana.title(f"Cliente - {self.nombre_cliente}")
-        self.ventana.geometry("600x500")
+        self.ventana.geometry("600x550")
         
         # Información del cliente
         frame_info = ttk.LabelFrame(self.ventana, text="Información del Cliente")
@@ -47,6 +48,7 @@ class Cliente:
         ttk.Label(frame_conexion, text="IP del Servidor:").pack(side=tk.LEFT)
         self.servidor_entry = ttk.Entry(frame_conexion, width=15)
         self.servidor_entry.pack(side=tk.LEFT, padx=5)
+        self.servidor_entry.insert(0, "127.0.0.1") # Default localhost para pruebas
         
         ttk.Button(frame_conexion, text="Conectar", 
                   command=self.conectar_servidor).pack(side=tk.LEFT, padx=5)
@@ -69,14 +71,14 @@ class Cliente:
         self.log_area = scrolledtext.ScrolledText(frame_log, height=15)
         self.log_area.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Frame de controles
+        # Frame de controles (Envío archivos 3.2)
         frame_controles = ttk.LabelFrame(frame_principal, text="Controles")
         frame_controles.pack(fill=tk.Y, side=tk.RIGHT, padx=(5,0))
         
-        ttk.Button(frame_controles, text="Enviar Archivo", 
-                  command=self.enviar_archivo_dialogo, width=15).pack(padx=5, pady=2)
+        ttk.Button(frame_controles, text="Enviar Archivo (3.2)", 
+                  command=self.enviar_archivo_dialogo, width=20).pack(padx=5, pady=2)
         
-        # Entrada de mensajes
+        # Entrada de mensajes (3.3)
         frame_mensaje = ttk.Frame(self.ventana)
         frame_mensaje.pack(fill=tk.X, padx=10, pady=5)
         
@@ -104,7 +106,7 @@ class Cliente:
             self.socket_cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket_cliente.settimeout(5)
             self.socket_cliente.connect((self.host_servidor, self.port_servidor))
-            self.socket_cliente.settimeout(None) # Quitar timeout para operación normal
+            self.socket_cliente.settimeout(None)
             
             # Enviar información de identificación
             info_cliente = {
@@ -118,41 +120,29 @@ class Cliente:
             self.estado_label.config(text=f"Conectado a {self.host_servidor}:{self.port_servidor}", foreground="green")
             self.log("✅ Conectado al servidor exitosamente")
             
-            # Hilo para recibir mensajes
             threading.Thread(target=self.recibir_mensajes, daemon=True).start()
             
         except Exception as e:
             self.log(f"❌ Error al conectar: {e}")
             
     def recibir_mensajes(self):
-        buffer = ""
         while self.conectado:
             try:
-                # Leer longitud del mensaje primero (protocolo simple: 10 bytes para longitud)
-                # Pero para mantener compatibilidad con el código anterior que usaba json directo,
-                # vamos a usar un delimitador o intentar leer json.
-                # Para simplificar y soportar imágenes base64 grandes, aumentamos el buffer
-                # y usamos un protocolo de líneas o delimitadores si fuera necesario.
-                # Por ahora, asumiremos que los mensajes JSON caben en el buffer o llegan completos.
-                # Una mejor implementación usaría un prefijo de longitud.
-                
-                # Implementación robusta: Leer hasta encontrar un JSON válido o usar prefijo.
-                # Vamos a usar un tamaño grande de buffer.
-                data = self.socket_cliente.recv(1024*1024) # 1MB buffer
+                # Buffer grande para recibir imágenes o archivos
+                data = self.socket_cliente.recv(1024*2048) 
                 if not data:
                     break
                 
                 mensaje = data.decode('utf-8', errors='ignore')
                 
-                # Intentar procesar múltiples mensajes si llegan pegados
-                # Esto es una simplificación. En producción se necesita un protocolo de framing.
                 try:
-                    datos = json.loads(mensaje)
-                    self.procesar_mensaje_json(datos)
+                    # En un entorno real se necesita un delimitador.
+                    # Aquí intentamos parsear lo que llega.
+                    if mensaje.strip().startswith('{') and mensaje.strip().endswith('}'):
+                        datos = json.loads(mensaje)
+                        self.procesar_mensaje_json(datos)
                 except json.JSONDecodeError:
-                    # Si falla, podría ser que llegaron varios mensajes o está incompleto
-                    # Para este ejercicio escolar, asumiremos mensajes atómicos o simples
-                    self.log(f"📨 Servidor: {mensaje[:50]}...")
+                    pass
                     
             except Exception as e:
                 if self.conectado:
@@ -165,42 +155,44 @@ class Cliente:
     def procesar_mensaje_json(self, datos):
         tipo = datos.get('tipo')
         
-        if tipo == 'chat_remoto':
+        if tipo == 'chat_remoto': # 3.3
             self.log(f"💬 {datos['de']}: {datos['contenido']}")
             
-        elif tipo == 'solicitar_pantalla':
-            self.log(f"📺 El servidor solicita ver tu pantalla")
-            threading.Thread(target=self.iniciar_compartir_pantalla, args=(datos.get('destino', 'servidor'),), daemon=True).start()
+        elif tipo == 'solicitar_pantalla': # 3.1 y 3.4 (Emisor)
+            destino = datos.get('destino', 'servidor')
+            self.log(f"📺 Solicitud de transmisión para: {destino}")
+            if not self.compartiendo_pantalla:
+                threading.Thread(target=self.iniciar_compartir_pantalla, args=(destino,), daemon=True).start()
             
         elif tipo == 'detener_pantalla':
             self.compartiendo_pantalla = False
             self.log("📺 Transmisión de pantalla detenida")
             
-        elif tipo == 'bloquear_input':
+        elif tipo == 'bloquear_input': # 3.6
             self.bloquear_input()
             
-        elif tipo == 'desbloquear_input':
+        elif tipo == 'desbloquear_input': # 3.7
             self.desbloquear_input()
             
-        elif tipo == 'apagar_pc':
+        elif tipo == 'apagar_pc': # 3.8
             self.apagar_pc()
             
-        elif tipo == 'bloquear_web':
+        elif tipo == 'bloquear_web': # 3.9
             self.bloquear_web(datos.get('url'))
 
-        elif tipo == 'desbloquear_web':
+        elif tipo == 'desbloquear_web': # 3.9
             self.desbloquear_web(datos.get('url'))
             
-        elif tipo == 'control_ping':
+        elif tipo == 'control_ping': # 3.10
             self.controlar_ping(datos.get('accion'))
             
-        elif tipo == 'archivo':
+        elif tipo == 'archivo': # 3.2
             self.recibir_archivo(datos)
             
-        elif tipo == 'mostrar_imagen':
+        elif tipo == 'imagen_pantalla': # 3.4 (Receptor) y 3.5 (Receptor del Servidor)
             self.mostrar_imagen_remota(datos)
 
-    def enviar_mensaje_chat(self, event=None):
+    def enviar_mensaje_chat(self, event=None): # 3.3
         if not self.conectado:
             return
         mensaje = self.mensaje_entry.get().strip()
@@ -216,48 +208,63 @@ class Cliente:
         except Exception as e:
             self.log(f"❌ Error al enviar: {e}")
 
-    # --- Funcionalidades 3.1, 3.4, 3.5: Pantalla ---
+    # --- Funcionalidades 3.1, 3.4: Emisor de Pantalla ---
     def iniciar_compartir_pantalla(self, destino):
         self.compartiendo_pantalla = True
-        self.log(f"🚀 Iniciando transmisión de pantalla a {destino}...")
+        self.log(f"🚀 Compartiendo pantalla con {destino}...")
         
         with mss.mss() as sct:
-            monitor = sct.monitors[1] # Monitor principal
+            # Detectar monitor. Linux a veces requiere ajustes específicos
+            monitor = sct.monitors[1]
             
             while self.compartiendo_pantalla and self.conectado:
                 try:
-                    # Capturar pantalla
                     sct_img = sct.grab(monitor)
                     img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                    img.thumbnail((800, 600)) # Reducir calidad para velocidad
                     
-                    # Redimensionar para rendimiento
-                    img.thumbnail((800, 600))
-                    
-                    # Convertir a bytes JPEG
                     buffer = io.BytesIO()
-                    img.save(buffer, format="JPEG", quality=50)
+                    img.save(buffer, format="JPEG", quality=40)
                     img_str = base64.b64encode(buffer.getvalue()).decode()
                     
-                    # Enviar
                     self.enviar_json({
                         'tipo': 'imagen_pantalla',
                         'destino': destino,
                         'contenido': img_str
                     })
                     
-                    time.sleep(0.1) # ~10 FPS
+                    time.sleep(0.15)
                 except Exception as e:
-                    self.log(f"❌ Error compartiendo pantalla: {e}")
+                    self.log(f"❌ Error compartiendo: {e}")
                     break
         self.compartiendo_pantalla = False
 
+    # --- Funcionalidad 3.4 y 3.5: Receptor de Pantalla ---
     def mostrar_imagen_remota(self, datos):
-        # Esta función mostraría la imagen recibida en una ventana aparte
-        # Por simplicidad, solo logueamos que llegó
-        # En una implementación real, actualizaríamos un Label con la imagen
-        pass
+        # Esta función faltaba implementar en el código original
+        try:
+            contenido = datos['contenido']
+            img_data = base64.b64decode(contenido)
+            img = Image.open(io.BytesIO(img_data))
+            photo = ImageTk.PhotoImage(img)
 
-    # --- Funcionalidad 3.2: Transferencia de Archivos ---
+            if self.ventana_remota is None or not tk.Toplevel.winfo_exists(self.ventana_remota):
+                self.ventana_remota = Toplevel(self.ventana)
+                self.ventana_remota.title("Visualización Remota")
+                self.lbl_remoto = Label(self.ventana_remota)
+                self.lbl_remoto.pack()
+                
+                def on_close():
+                    self.ventana_remota.destroy()
+                    self.ventana_remota = None
+                self.ventana_remota.protocol("WM_DELETE_WINDOW", on_close)
+
+            self.lbl_remoto.config(image=photo)
+            self.lbl_remoto.image = photo
+        except Exception as e:
+            print(f"Error renderizando imagen remota: {e}")
+
+    # --- Funcionalidad 3.2: Archivos ---
     def enviar_archivo_dialogo(self):
         filename = filedialog.askopenfilename()
         if filename and self.conectado:
@@ -274,7 +281,7 @@ class Cliente:
                 'nombre': nombre_archivo,
                 'contenido': contenido
             })
-            self.log(f"📂 Archivo enviado: {nombre_archivo}")
+            self.log(f"📤 Archivo enviado: {nombre_archivo}")
         except Exception as e:
             self.log(f"❌ Error enviando archivo: {e}")
             
@@ -283,10 +290,10 @@ class Cliente:
             nombre = datos['nombre']
             contenido = base64.b64decode(datos['contenido'])
             
-            # Guardar en descargas o carpeta actual
             with open(f"recibido_{nombre}", 'wb') as f:
                 f.write(contenido)
-            self.log(f"📂 Archivo recibido y guardado: recibido_{nombre}")
+            self.log(f"📥 Archivo recibido: recibido_{nombre}")
+            messagebox.showinfo("Archivo", f"Se recibió el archivo: {nombre}")
         except Exception as e:
             self.log(f"❌ Error guardando archivo: {e}")
 
@@ -294,39 +301,39 @@ class Cliente:
     def bloquear_input(self):
         if self.bloqueado: return
         self.bloqueado = True
-        self.log("🔒 TECLADO Y MOUSE BLOQUEADOS")
+        self.log("🔒 SISTEMA BLOQUEADO POR SERVIDOR")
         
-        # Bloquear mouse
-        self.mouse_listener = mouse.Listener(suppress=True)
-        self.mouse_listener.start()
-        
-        # Bloquear teclado
-        self.keyboard_listener = keyboard.Listener(suppress=True)
-        self.keyboard_listener.start()
+        try:
+            self.mouse_listener = mouse.Listener(suppress=True)
+            self.mouse_listener.start()
+            self.keyboard_listener = keyboard.Listener(suppress=True)
+            self.keyboard_listener.start()
+        except Exception as e:
+            self.log(f"Error bloqueando inputs (¿Linux sin sudo?): {e}")
         
     def desbloquear_input(self):
         if not self.bloqueado: return
         self.bloqueado = False
-        self.log("🔓 Teclado y mouse desbloqueados")
+        self.log("🔓 Sistema desbloqueado")
         
-        if self.mouse_listener:
-            self.mouse_listener.stop()
-        if self.keyboard_listener:
-            self.keyboard_listener.stop()
+        if self.mouse_listener: self.mouse_listener.stop()
+        if self.keyboard_listener: self.keyboard_listener.stop()
 
     # --- Funcionalidad 3.8: Apagar PC ---
     def apagar_pc(self):
-        self.log("⚠️ APAGANDO EL EQUIPO...")
+        self.log("⚠️ RECIBIDO COMANDO DE APAGADO")
+        time.sleep(2)
         if platform.system() == "Windows":
-            os.system("shutdown /s /t 5")
-        else:
+            os.system("shutdown /s /t 0")
+        else: # Linux
             os.system("shutdown -h now")
 
     # --- Funcionalidad 3.9: Bloquear Web ---
     def bloquear_web(self, url):
         if not url: return
-        self.log(f"🚫 Bloqueando acceso a {url}")
+        self.log(f"🚫 Intentando bloquear {url}...")
         
+        # Rutas según SO
         hosts_path = r"C:\Windows\System32\drivers\etc\hosts" if platform.system() == "Windows" else "/etc/hosts"
         redirect = "127.0.0.1"
         
@@ -335,21 +342,19 @@ class Cliente:
                 content = file.read()
                 if url not in content:
                     file.write(f"\n{redirect} {url}")
-                    self.log("✅ Sitio bloqueado (requiere admin)")
+                    self.log(f"✅ {url} bloqueado.")
                 else:
-                    self.log("⚠️ El sitio ya estaba bloqueado")
+                    self.log(f"⚠️ {url} ya estaba bloqueado.")
         except PermissionError:
-            self.log("❌ Error: Se requieren permisos de administrador para bloquear webs")
+            self.log("❌ ERROR: Se requieren permisos de ADMIN/ROOT para bloquear webs.")
 
     def desbloquear_web(self, url):
         if not url: return
-        self.log(f"🔓 Desbloqueando acceso a {url}")
+        self.log(f"🔓 Desbloqueando {url}...")
         
         hosts_path = r"C:\Windows\System32\drivers\etc\hosts" if platform.system() == "Windows" else "/etc/hosts"
-        redirect = "127.0.0.1"
         
         try:
-            lines = []
             with open(hosts_path, 'r') as file:
                 lines = file.readlines()
             
@@ -357,22 +362,21 @@ class Cliente:
                 for line in lines:
                     if url not in line:
                         file.write(line)
-            
-            self.log("✅ Sitio desbloqueado (requiere admin)")
+            self.log(f"✅ {url} desbloqueado.")
         except PermissionError:
-            self.log("❌ Error: Se requieren permisos de administrador para desbloquear webs")
-        except Exception as e:
-            self.log(f"❌ Error al desbloquear: {e}")
+            self.log("❌ ERROR: Se requieren permisos de ADMIN/ROOT.")
 
     # --- Funcionalidad 3.10: Ping ---
     def controlar_ping(self, accion):
         sistema = platform.system()
         try:
             if accion == "bloquear":
-                self.log("🚫 Bloqueando Ping...")
+                self.log("🚫 Bloqueando Ping entrante...")
                 if sistema == "Windows":
+                    # Requiere correr como Admin
                     os.system("netsh advfirewall firewall add rule name=\"BlockPing\" protocol=icmpv4:8,any dir=in action=block")
                 else:
+                    # Requiere sudo
                     os.system("iptables -A INPUT -p icmp --icmp-type echo-request -j DROP")
             else:
                 self.log("✅ Permitiendo Ping...")
@@ -389,14 +393,12 @@ class Cliente:
             self.socket_cliente = None
         self.conectado = False
         self.estado_label.config(text="Desconectado", foreground="red")
-        self.log("❌ Desconectado del servidor")
-        self.desbloquear_input() # Asegurar desbloqueo al desconectar
+        self.desbloquear_input()
             
     def ejecutar(self):
         self.ventana.mainloop()
 
 if __name__ == "__main__":
-    import sys
-    nombre = sys.argv[1] if len(sys.argv) > 1 else "Cliente"
+    nombre = sys.argv[1] if len(sys.argv) > 1 else f"Cliente_{platform.node()}"
     cliente = Cliente(nombre)
     cliente.ejecutar()
