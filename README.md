@@ -80,3 +80,56 @@ Esta aplicación permite conectar 3 dispositivos (1 Servidor y 2 Clientes) para 
 ## Solución de Problemas
 - **Permisos**: Si el bloqueo de web o ping no funciona, asegúrate de ejecutar `cliente.py` como administrador (`sudo python cliente.py` en Linux o "Ejecutar como administrador" en Windows).
 - **Firewall**: Asegúrate de que el puerto 5000 esté abierto en el firewall del servidor.
+
+## Instalacion Tkinter
+- **Ubuntu / Debian / Mint / Kali**: 
+   ```bash
+   sudo apt update
+   sudo apt install python3-tk tk
+   ```
+- **Fedora/Basadas en RPM**
+   ```bash
+   sudo dnf install python3-tkinter
+   ```
+- **Arch Linux/Manjaro**
+   ```bash
+   sudo pacman -S tk
+   ```
+
+## Librerias necesariar para "root"
+- Cuando ejecutas con `sudo`, Python usa el entorno del "superusuario", no el de tu usuario normal (`tu_nombre_de_usuario`). Es probable que root no tenga instaladas `mss` o `pynput`.
+- Ejecuta lo siguiente para instalar las dependencias en el usuario root:
+   ```bash
+   sudo pip3 install mss pynput pillow --break-system-packages
+   ```
+## Permitir que `sudo` use la pantalla grafica
+- Con el `import` arreglado aun tendras un problema al querer correr con `sudo`, el usuario root no tiene permisos para abrir ventanas en tu sesion grafica
+
+- 1.- Primero autoriza root en tu pantalla:
+   ```bash
+   xhost +SI:localuser:root
+   ```
+
+- 2.-Ejecuta el script preservando las variables de entorno: Usa el flag `-E` para mantener la variable `$DISPLAY`:
+   ```bash
+   sudo -E python3 cliente.py "NombreCliente"
+   ```
+
+## Instalacion de `xhost`
+- En caso que te mande error los comando para permitir al usuario `root` acceder a la pantalla grafica y que se pueda ejecutar el script con `sudo` ejecuta el comando de instalacion referente a tu distribucion Linux
+
+- **Ubuntu / Debian / Mint / Kali**: 
+   ```bash
+   sudo apt update
+   sudo apt install xorg-xhost
+   ```
+- **Fedora/Basadas en RPM**
+   ```bash
+   sudo dnf install xorg-xhost
+   ```
+- **Arch Linux/Manjaro**
+   ```bash
+   sudo pacman -S xorg-xhost
+   ```
+
+- Ya con `xhost` instalado deberia de funcionar los pasos para poder darle permiso al root de acceder a tu pantalla grafica
