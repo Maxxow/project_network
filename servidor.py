@@ -7,7 +7,6 @@ import base64
 import io
 import time
 from PIL import Image, ImageTk
-# Importamos mss para el punto 3.5 (Mostrar Servidor)
 import mss
 
 class Servidor:
@@ -17,8 +16,6 @@ class Servidor:
         self.clientes = {} 
         self.socket_servidor = None
         self.ventanas_pantalla = {} 
-        
-        # Control de transmisión del servidor (3.5)
         self.compartiendo_servidor = False
         
         self.crear_interfaz()
@@ -36,24 +33,20 @@ class Servidor:
         self.ventana.title("Servidor Maestro - Control Escolar")
         self.ventana.geometry("950x650")
         
-        # Info Header
         frame_info = ttk.LabelFrame(self.ventana, text="Estado del Servidor")
         frame_info.pack(fill=tk.X, padx=10, pady=5)
         ttk.Label(frame_info, text=f"IP Local: {self.host} | Puerto: {self.port}").pack(side=tk.LEFT, padx=10)
         self.estado_label = ttk.Label(frame_info, text="DETENIDO", foreground="red")
         self.estado_label.pack(side=tk.RIGHT, padx=10)
         
-        # Botones ON/OFF
         frame_main_btns = ttk.Frame(self.ventana)
         frame_main_btns.pack(fill=tk.X, padx=10, pady=5)
         ttk.Button(frame_main_btns, text="▶ INICIAR SERVIDOR", command=self.iniciar_servidor).pack(side=tk.LEFT, padx=5)
         ttk.Button(frame_main_btns, text="⏹ DETENER", command=self.detener_servidor).pack(side=tk.LEFT, padx=5)
         
-        # Panel dividido
         paned = ttk.PanedWindow(self.ventana, orient=tk.HORIZONTAL)
         paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        # Izquierda: Lista y Log
         frame_left = ttk.Frame(paned)
         paned.add(frame_left, weight=1)
         
@@ -65,7 +58,6 @@ class Servidor:
         self.log_area = scrolledtext.ScrolledText(frame_left, height=12)
         self.log_area.pack(fill=tk.BOTH, expand=True, padx=5, pady=2)
 
-        # Chat (3.3)
         frame_chat = ttk.LabelFrame(frame_left, text="Chat General (3.3)")
         frame_chat.pack(fill=tk.X, padx=5, pady=5)
         self.chat_entry = ttk.Entry(frame_chat)
@@ -73,11 +65,9 @@ class Servidor:
         self.chat_entry.bind('<Return>', self.enviar_mensaje_chat_servidor)
         ttk.Button(frame_chat, text="Enviar", command=self.enviar_mensaje_chat_servidor).pack(side=tk.RIGHT, padx=5)
         
-        # Derecha: Panel de Control por Puntos
         frame_right = ttk.LabelFrame(paned, text="Comandos")
         paned.add(frame_right, weight=1)
         
-        # Visualización
         lbl_vis = ttk.LabelFrame(frame_right, text="Visualización y Pantalla")
         lbl_vis.pack(fill=tk.X, padx=5, pady=5)
         
@@ -86,7 +76,6 @@ class Servidor:
         ttk.Button(lbl_vis, text="3.5 Mostrar SERVIDOR a Alumno", command=self.mostrar_servidor_a_cliente).pack(fill=tk.X, padx=2, pady=2)
         ttk.Button(lbl_vis, text="⏹ Detener Transmisiones", command=self.detener_transmision).pack(fill=tk.X, padx=2, pady=2)
         
-        # Control Hard
         lbl_ctrl = ttk.LabelFrame(frame_right, text="Control Hardware")
         lbl_ctrl.pack(fill=tk.X, padx=5, pady=5)
         
@@ -94,7 +83,6 @@ class Servidor:
         ttk.Button(lbl_ctrl, text="3.7 Desbloquear Input", command=lambda: self.enviar_comando_simple("desbloquear_input")).pack(fill=tk.X, padx=2, pady=2)
         ttk.Button(lbl_ctrl, text="3.8 Apagar Remoto", command=self.confirmar_apagado).pack(fill=tk.X, padx=2, pady=2)
         
-        # Red
         lbl_net = ttk.LabelFrame(frame_right, text="Red y Restricciones")
         lbl_net.pack(fill=tk.X, padx=5, pady=5)
         
@@ -103,7 +91,6 @@ class Servidor:
         ttk.Button(lbl_net, text="3.10 Bloquear Ping", command=lambda: self.control_ping("bloquear")).pack(fill=tk.X, padx=2, pady=2)
         ttk.Button(lbl_net, text="3.10 Permitir Ping", command=lambda: self.control_ping("permitir")).pack(fill=tk.X, padx=2, pady=2)
 
-        # Archivos
         lbl_trans = ttk.LabelFrame(frame_right, text="Archivos (3.2)")
         lbl_trans.pack(fill=tk.X, padx=5, pady=5)
         ttk.Button(lbl_trans, text="Enviar Archivo a Todos", command=self.enviar_archivo_dialogo).pack(fill=tk.X, padx=2, pady=2)
@@ -131,15 +118,12 @@ class Servidor:
                 if not self.socket_servidor: break
                 client_sock, addr = self.socket_servidor.accept()
                 
-                # Recibir ID inicial
                 data = client_sock.recv(4096).decode()
                 info = json.loads(data)
                 cid = info['id']
                 
-                # Guardar cliente
                 self.clientes[cid] = {'socket': client_sock, 'direccion': addr, 'info': info}
                 
-                # Actualizar UI en hilo principal (simplificado aquí, Tk es thread-sensitive)
                 self.actualizar_lista()
                 self.log(f"🔗 Nuevo alumno: {cid} desde {addr[0]}")
                 
@@ -150,7 +134,7 @@ class Servidor:
     def manejar_cliente(self, sock, cid):
         while True:
             try:
-                data = sock.recv(1024*2048) # Buffer grande
+                data = sock.recv(1024*4096)
                 if not data: break
                 
                 mensaje = data.decode('utf-8', errors='ignore')
@@ -172,22 +156,20 @@ class Servidor:
     def procesar_mensaje(self, datos, origen):
         tipo = datos.get('tipo')
         
-        if tipo == 'chat': # 3.3
+        if tipo == 'chat':
             self.log(f"💬 {origen}: {datos['contenido']}")
-            # Reenviar a todos para chat grupal
             for cid in self.clientes:
                 if cid != origen:
                     self.enviar_json(cid, {'tipo': 'chat_remoto', 'de': origen, 'contenido': datos['contenido']})
                     
-        elif tipo == 'imagen_pantalla': # 3.1 y 3.4
+        elif tipo == 'imagen_pantalla':
             destino = datos.get('destino')
             if destino == 'servidor':
                 self.actualizar_ventana_pantalla(origen, datos['contenido'])
             elif destino in self.clientes:
-                self.enviar_json(destino, datos) # Reenviar imagen al alumno destino
+                self.enviar_json(destino, datos)
                 
-        elif tipo == 'archivo': # 3.2
-            # Reenviar archivo a todos los demás alumnos
+        elif tipo == 'archivo':
             self.log(f"📂 Archivo recibido de {origen}, retransmitiendo...")
             for cid in self.clientes:
                 if cid != origen:
@@ -201,8 +183,7 @@ class Servidor:
         except Exception as e:
             self.log(f"❌ Error enviando a {cid}: {e}")
 
-    # --- Chat Servidor ---
-    def enviar_mensaje_chat_servidor(self, event=None): # 3.3
+    def enviar_mensaje_chat_servidor(self, event=None):
         mensaje = self.chat_entry.get().strip()
         if mensaje:
             self.log(f"💬 Servidor: {mensaje}")
@@ -210,7 +191,6 @@ class Servidor:
                 self.enviar_json(cid, {'tipo': 'chat_remoto', 'de': 'Profesor', 'contenido': mensaje})
             self.chat_entry.delete(0, tk.END)
 
-    # --- Lógica de Control ---
     def get_cliente_seleccionado(self):
         sel = self.lista_clientes.curselection()
         if not sel:
@@ -226,14 +206,12 @@ class Servidor:
             self.enviar_json(cid, payload)
             self.log(f"Comando {tipo_comando} -> {cid}")
 
-    # --- 3.1 Ver Pantalla ---
     def ver_pantalla_cliente(self):
         cid = self.get_cliente_seleccionado()
         if cid:
             self.enviar_json(cid, {'tipo': 'solicitar_pantalla', 'destino': 'servidor'})
             self.abrir_ventana_pantalla(cid)
 
-    # --- 3.4 Exhibir ---
     def exhibir_cliente(self):
         origen = self.get_cliente_seleccionado()
         if not origen: return
@@ -245,37 +223,61 @@ class Servidor:
         else:
             self.log("❌ Alumno destino no encontrado")
 
-    # --- 3.5 Mostrar Servidor a Alumno (IMPLEMENTADO) ---
+    # --- 3.5 Mostrar Servidor a Alumno CORREGIDO ---
     def mostrar_servidor_a_cliente(self):
         cid = self.get_cliente_seleccionado()
         if cid:
             self.compartiendo_servidor = True
+            
+            # Chequeo preventivo de mss
+            try:
+                with mss.mss() as sct: pass
+            except Exception as e:
+                self.log(f"❌ Error de captura en servidor: {e}")
+                if "Wayland" in str(e):
+                    self.log("💡 Sugerencia: Ejecuta con 'GDK_BACKEND=x11 python servidor.py'")
+                return
+                
             threading.Thread(target=self.hilo_transmitir_servidor, args=(cid,), daemon=True).start()
             self.log(f"📺 Transmitiendo MI pantalla a {cid}")
 
     def hilo_transmitir_servidor(self, destino):
-        with mss.mss() as sct:
-            monitor = sct.monitors[1]
-            while self.compartiendo_servidor and (destino in self.clientes):
-                try:
-                    sct_img = sct.grab(monitor)
-                    img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-                    img.thumbnail((800, 600))
+        try:
+            with mss.mss() as sct:
+                # Seleccionar monitor con seguridad
+                if len(sct.monitors) > 1:
+                    monitor = sct.monitors[1]
+                else:
+                    monitor = sct.monitors[0]
                     
-                    buffer = io.BytesIO()
-                    img.save(buffer, format="JPEG", quality=40)
-                    img_str = base64.b64encode(buffer.getvalue()).decode()
-                    
-                    self.enviar_json(destino, {
-                        'tipo': 'imagen_pantalla',
-                        'destino': 'cliente', # Indicamos que es para el cliente
-                        'contenido': img_str
-                    })
-                    time.sleep(0.15)
-                except Exception as e:
-                    print(f"Error transmision servidor: {e}")
-                    break
-        self.log("Fin transmisión servidor")
+                while self.compartiendo_servidor and (destino in self.clientes):
+                    start_time = time.time()
+                    try:
+                        sct_img = sct.grab(monitor)
+                        img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                        img.thumbnail((800, 600))
+                        
+                        buffer = io.BytesIO()
+                        img.save(buffer, format="JPEG", quality=40)
+                        img_str = base64.b64encode(buffer.getvalue()).decode()
+                        
+                        self.enviar_json(destino, {
+                            'tipo': 'imagen_pantalla',
+                            'destino': 'cliente',
+                            'contenido': img_str
+                        })
+                        
+                        elapsed = time.time() - start_time
+                        if elapsed < 0.15:
+                            time.sleep(0.15 - elapsed)
+                    except Exception as e:
+                        print(f"Error transmisión loop: {e}")
+                        break
+        except Exception as e:
+            self.log(f"❌ Error en hilo de servidor: {e}")
+            
+        self.compartiendo_servidor = False
+        self.log("⏹ Fin transmisión servidor")
 
     def detener_transmision(self):
         self.compartiendo_servidor = False
@@ -283,7 +285,6 @@ class Servidor:
         if cid:
             self.enviar_json(cid, {'tipo': 'detener_pantalla'})
 
-    # --- 3.8, 3.9, 3.10 Comandos ---
     def confirmar_apagado(self):
         if messagebox.askyesno("PELIGRO", "¿Apagar equipo remoto?"):
             self.enviar_comando_simple("apagar_pc")
@@ -299,7 +300,6 @@ class Servidor:
     def control_ping(self, accion):
         self.enviar_comando_simple("control_ping", {'accion': accion})
 
-    # --- 3.2 Archivos ---
     def enviar_archivo_dialogo(self):
         filepath = filedialog.askopenfilename()
         if filepath:
@@ -312,14 +312,12 @@ class Servidor:
             with open(filepath, 'rb') as f:
                 contenido = base64.b64encode(f.read()).decode()
             
-            # Broadcast a todos
             for cid in self.clientes:
                 self.enviar_json(cid, {'tipo': 'archivo', 'nombre': nombre, 'contenido': contenido})
             self.log(f"📂 Archivo enviado a todos: {nombre}")
         except Exception as e:
             self.log(f"Error archivo: {e}")
 
-    # --- Gestión de Ventanas de Pantalla ---
     def abrir_ventana_pantalla(self, cid):
         if cid in self.ventanas_pantalla: return
         top = Toplevel(self.ventana)

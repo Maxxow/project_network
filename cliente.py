@@ -48,7 +48,7 @@ class Cliente:
         ttk.Label(frame_conexion, text="IP del Servidor:").pack(side=tk.LEFT)
         self.servidor_entry = ttk.Entry(frame_conexion, width=15)
         self.servidor_entry.pack(side=tk.LEFT, padx=5)
-        self.servidor_entry.insert(0, "127.0.0.1") # Default localhost para pruebas
+        self.servidor_entry.insert(0, "127.0.0.1")
         
         ttk.Button(frame_conexion, text="Conectar", 
                   command=self.conectar_servidor).pack(side=tk.LEFT, padx=5)
@@ -129,15 +129,13 @@ class Cliente:
         while self.conectado:
             try:
                 # Buffer grande para recibir imágenes o archivos
-                data = self.socket_cliente.recv(1024*2048) 
+                data = self.socket_cliente.recv(1024*4096) 
                 if not data:
                     break
                 
                 mensaje = data.decode('utf-8', errors='ignore')
                 
                 try:
-                    # En un entorno real se necesita un delimitador.
-                    # Aquí intentamos parsear lo que llega.
                     if mensaje.strip().startswith('{') and mensaje.strip().endswith('}'):
                         datos = json.loads(mensaje)
                         self.procesar_mensaje_json(datos)
@@ -155,10 +153,10 @@ class Cliente:
     def procesar_mensaje_json(self, datos):
         tipo = datos.get('tipo')
         
-        if tipo == 'chat_remoto': # 3.3
+        if tipo == 'chat_remoto':
             self.log(f"💬 {datos['de']}: {datos['contenido']}")
             
-        elif tipo == 'solicitar_pantalla': # 3.1 y 3.4 (Emisor)
+        elif tipo == 'solicitar_pantalla':
             destino = datos.get('destino', 'servidor')
             self.log(f"📺 Solicitud de transmisión para: {destino}")
             if not self.compartiendo_pantalla:
@@ -168,31 +166,31 @@ class Cliente:
             self.compartiendo_pantalla = False
             self.log("📺 Transmisión de pantalla detenida")
             
-        elif tipo == 'bloquear_input': # 3.6
+        elif tipo == 'bloquear_input':
             self.bloquear_input()
             
-        elif tipo == 'desbloquear_input': # 3.7
+        elif tipo == 'desbloquear_input':
             self.desbloquear_input()
             
-        elif tipo == 'apagar_pc': # 3.8
+        elif tipo == 'apagar_pc':
             self.apagar_pc()
             
-        elif tipo == 'bloquear_web': # 3.9
+        elif tipo == 'bloquear_web':
             self.bloquear_web(datos.get('url'))
 
-        elif tipo == 'desbloquear_web': # 3.9
+        elif tipo == 'desbloquear_web':
             self.desbloquear_web(datos.get('url'))
             
-        elif tipo == 'control_ping': # 3.10
+        elif tipo == 'control_ping':
             self.controlar_ping(datos.get('accion'))
             
-        elif tipo == 'archivo': # 3.2
+        elif tipo == 'archivo':
             self.recibir_archivo(datos)
             
-        elif tipo == 'imagen_pantalla': # 3.4 (Receptor) y 3.5 (Receptor del Servidor)
+        elif tipo == 'imagen_pantalla':
             self.mostrar_imagen_remota(datos)
 
-    def enviar_mensaje_chat(self, event=None): # 3.3
+    def enviar_mensaje_chat(self, event=None):
         if not self.conectado:
             return
         mensaje = self.mensaje_entry.get().strip()
@@ -214,14 +212,13 @@ class Cliente:
         self.log(f"🚀 Compartiendo pantalla con {destino}...")
         
         with mss.mss() as sct:
-            # Detectar monitor. Linux a veces requiere ajustes específicos
             monitor = sct.monitors[1]
             
             while self.compartiendo_pantalla and self.conectado:
                 try:
                     sct_img = sct.grab(monitor)
                     img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-                    img.thumbnail((800, 600)) # Reducir calidad para velocidad
+                    img.thumbnail((800, 600))
                     
                     buffer = io.BytesIO()
                     img.save(buffer, format="JPEG", quality=40)
@@ -241,7 +238,6 @@ class Cliente:
 
     # --- Funcionalidad 3.4 y 3.5: Receptor de Pantalla ---
     def mostrar_imagen_remota(self, datos):
-        # Esta función faltaba implementar en el código original
         try:
             contenido = datos['contenido']
             img_data = base64.b64decode(contenido)
@@ -262,7 +258,7 @@ class Cliente:
             self.lbl_remoto.config(image=photo)
             self.lbl_remoto.image = photo
         except Exception as e:
-            print(f"Error renderizando imagen remota: {e}")
+            pass
 
     # --- Funcionalidad 3.2: Archivos ---
     def enviar_archivo_dialogo(self):
@@ -297,27 +293,50 @@ class Cliente:
         except Exception as e:
             self.log(f"❌ Error guardando archivo: {e}")
 
-    # --- Funcionalidad 3.6, 3.7: Bloqueo Input ---
+    # --- Funcionalidad 3.6, 3.7: Bloqueo Input MEJORADO ---
     def bloquear_input(self):
         if self.bloqueado: return
         self.bloqueado = True
-        self.log("🔒 SISTEMA BLOQUEADO POR SERVIDOR")
+        self.log("🔒 SISTEMA BLOQUEADO (Teclado y Mouse)")
         
         try:
+            # 1. Bloquear eventos (suppress=True hace que los clics no pasen)
             self.mouse_listener = mouse.Listener(suppress=True)
             self.mouse_listener.start()
             self.keyboard_listener = keyboard.Listener(suppress=True)
             self.keyboard_listener.start()
+            
+            # 2. TRAMPA VISUAL: Hilo que fuerza la posición del mouse a 0,0
+            # Esto evita que el usuario mueva el cursor visualmente
+            threading.Thread(target=self._trampa_mouse, daemon=True).start()
+            
         except Exception as e:
-            self.log(f"Error bloqueando inputs (¿Linux sin sudo?): {e}")
+            self.log(f"Error bloqueando inputs: {e}")
         
+    def _trampa_mouse(self):
+        """Mantiene el mouse atrapado en la esquina 0,0 mientras esté bloqueado"""
+        controlador = mouse.Controller()
+        # Puedes cambiar 0,0 por coordenadas centrales si prefieres
+        x_target, y_target = 0, 0 
+        
+        while self.bloqueado:
+            # Forzar posición constantemente
+            controlador.position = (x_target, y_target)
+            # Frecuencia muy alta para que no se escape
+            time.sleep(0.01)
+
     def desbloquear_input(self):
         if not self.bloqueado: return
         self.bloqueado = False
         self.log("🔓 Sistema desbloqueado")
         
-        if self.mouse_listener: self.mouse_listener.stop()
-        if self.keyboard_listener: self.keyboard_listener.stop()
+        # Detener listeners
+        if self.mouse_listener: 
+            self.mouse_listener.stop()
+            self.mouse_listener = None
+        if self.keyboard_listener: 
+            self.keyboard_listener.stop()
+            self.keyboard_listener = None
 
     # --- Funcionalidad 3.8: Apagar PC ---
     def apagar_pc(self):
@@ -333,7 +352,6 @@ class Cliente:
         if not url: return
         self.log(f"🚫 Intentando bloquear {url}...")
         
-        # Rutas según SO
         hosts_path = r"C:\Windows\System32\drivers\etc\hosts" if platform.system() == "Windows" else "/etc/hosts"
         redirect = "127.0.0.1"
         
@@ -373,10 +391,8 @@ class Cliente:
             if accion == "bloquear":
                 self.log("🚫 Bloqueando Ping entrante...")
                 if sistema == "Windows":
-                    # Requiere correr como Admin
                     os.system("netsh advfirewall firewall add rule name=\"BlockPing\" protocol=icmpv4:8,any dir=in action=block")
                 else:
-                    # Requiere sudo
                     os.system("iptables -A INPUT -p icmp --icmp-type echo-request -j DROP")
             else:
                 self.log("✅ Permitiendo Ping...")
