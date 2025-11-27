@@ -1,7 +1,9 @@
 import socket
 import threading
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox, filedialog, Toplevel, Label
+from tkinter import scrolledtext, messagebox, filedialog, Toplevel, Label
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 import json
 import platform
 import os
@@ -30,64 +32,77 @@ class Cliente:
         self.crear_interfaz()
         
     def crear_interfaz(self):
-        self.ventana = tk.Tk()
-        self.ventana.title(f"Cliente - {self.nombre_cliente}")
-        self.ventana.geometry("600x550")
+        # Usar ttkbootstrap con tema Darkly (modo oscuro suave y agradable)
+        self.ventana = ttk.Window(themename="darkly")
+        self.ventana.title(f"🖥️ Cliente - {self.nombre_cliente}")
+        self.ventana.geometry("850x750")
         
-        # Información del cliente
-        frame_info = ttk.LabelFrame(self.ventana, text="Información del Cliente")
-        frame_info.pack(fill=tk.X, padx=10, pady=5)
+        # Información del cliente con mejor padding
+        frame_info = ttk.Labelframe(self.ventana, text="📋 Información del Cliente", bootstyle="primary")
+        frame_info.pack(fill=tk.X, padx=15, pady=10)
         
-        ttk.Label(frame_info, text=f"Nombre: {self.nombre_cliente}").pack(anchor=tk.W, padx=5, pady=2)
-        ttk.Label(frame_info, text=f"Sistema: {platform.system()} {platform.release()}").pack(anchor=tk.W, padx=5, pady=2)
+        ttk.Label(frame_info, text=f"👤 Nombre: {self.nombre_cliente}", 
+                 font=("Segoe UI", 12)).pack(anchor=tk.W, padx=10, pady=6)
+        ttk.Label(frame_info, text=f"💻 Sistema: {platform.system()} {platform.release()}", 
+                 font=("Segoe UI", 12)).pack(anchor=tk.W, padx=10, pady=6)
         
-        # Frame de conexión
+        # Frame de conexión con mejor espaciado
         frame_conexion = ttk.Frame(self.ventana)
-        frame_conexion.pack(fill=tk.X, padx=10, pady=5)
+        frame_conexion.pack(fill=tk.X, padx=15, pady=10)
         
-        ttk.Label(frame_conexion, text="IP del Servidor:").pack(side=tk.LEFT)
-        self.servidor_entry = ttk.Entry(frame_conexion, width=15)
-        self.servidor_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Label(frame_conexion, text="🌐 IP del Servidor:", 
+                 font=("Segoe UI", 12, "bold")).pack(side=tk.LEFT, padx=5)
+        self.servidor_entry = ttk.Entry(frame_conexion, width=20, font=("Consolas", 12))
+        self.servidor_entry.pack(side=tk.LEFT, padx=8)
         self.servidor_entry.insert(0, "127.0.0.1")
         
-        ttk.Button(frame_conexion, text="Conectar", 
-                  command=self.conectar_servidor).pack(side=tk.LEFT, padx=5)
+        # Botones con colores semánticos
+        ttk.Button(frame_conexion, text="✅ Conectar", 
+                  command=self.conectar_servidor, 
+                  bootstyle="success", width=14).pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(frame_conexion, text="Desconectar", 
-                  command=self.desconectar_servidor).pack(side=tk.LEFT, padx=5)
+        ttk.Button(frame_conexion, text="❌ Desconectar", 
+                  command=self.desconectar_servidor, 
+                  bootstyle="danger", width=14).pack(side=tk.LEFT, padx=5)
         
-        # Estado
-        self.estado_label = ttk.Label(self.ventana, text="Desconectado", foreground="red")
-        self.estado_label.pack(pady=5)
+        # Estado con indicador visual
+        self.estado_label = ttk.Label(self.ventana, text="⚫ Desconectado", 
+                                     font=("Segoe UI", 13, "bold"), bootstyle="danger")
+        self.estado_label.pack(pady=8)
         
-        # Frame principal
+        # Frame principal con mejor organización
         frame_principal = ttk.Frame(self.ventana)
-        frame_principal.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        frame_principal.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
         
-        # Log de mensajes
-        frame_log = ttk.LabelFrame(frame_principal, text="Mensajes")
+        # Log de mensajes con estilo
+        frame_log = ttk.Labelframe(frame_principal, text="💬 Mensajes y Actividad", bootstyle="info")
         frame_log.pack(fill=tk.BOTH, expand=True, side=tk.LEFT)
         
-        self.log_area = scrolledtext.ScrolledText(frame_log, height=15)
-        self.log_area.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.log_area = scrolledtext.ScrolledText(frame_log, height=16, 
+                                                  font=("Consolas", 11),
+                                                  bg="#1a1d23", fg="#00ff41",
+                                                  insertbackground="white")
+        self.log_area.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
         
-        # Frame de controles (Envío archivos 3.2)
-        frame_controles = ttk.LabelFrame(frame_principal, text="Controles")
-        frame_controles.pack(fill=tk.Y, side=tk.RIGHT, padx=(5,0))
+        # Frame de controles con mejor diseño
+        frame_controles = ttk.Labelframe(frame_principal, text="🎛️ Controles", bootstyle="secondary")
+        frame_controles.pack(fill=tk.Y, side=tk.RIGHT, padx=(10,0))
         
-        ttk.Button(frame_controles, text="Enviar Archivo (3.2)", 
-                  command=self.enviar_archivo_dialogo, width=20).pack(padx=5, pady=2)
+        ttk.Button(frame_controles, text="📁 Enviar Archivo", 
+                  command=self.enviar_archivo_dialogo, 
+                  bootstyle="primary-outline", width=20).pack(padx=10, pady=10)
         
-        # Entrada de mensajes (3.3)
-        frame_mensaje = ttk.Frame(self.ventana)
-        frame_mensaje.pack(fill=tk.X, padx=10, pady=5)
+        # Entrada de mensajes (3.3) con mejor estilo
+        frame_mensaje = ttk.Labelframe(self.ventana, text="✉️ Chat", bootstyle="info")
+        frame_mensaje.pack(fill=tk.X, padx=15, pady=10)
         
-        self.mensaje_entry = ttk.Entry(frame_mensaje)
-        self.mensaje_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.mensaje_entry = ttk.Entry(frame_mensaje, font=("Segoe UI", 12))
+        self.mensaje_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10, pady=10)
         self.mensaje_entry.bind('<Return>', self.enviar_mensaje_chat)
         
-        ttk.Button(frame_mensaje, text="Enviar", 
-                  command=self.enviar_mensaje_chat).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(frame_mensaje, text="📤 Enviar", 
+                  command=self.enviar_mensaje_chat, 
+                  bootstyle="primary", width=14).pack(side=tk.RIGHT, padx=10, pady=10)
         
     def log(self, mensaje):
         self.log_area.insert(tk.END, f"{mensaje}\n")
@@ -117,7 +132,7 @@ class Cliente:
             self.socket_cliente.send(json.dumps(info_cliente).encode())
             
             self.conectado = True
-            self.estado_label.config(text=f"Conectado a {self.host_servidor}:{self.port_servidor}", foreground="green")
+            self.estado_label.config(text=f"🟢 Conectado a {self.host_servidor}:{self.port_servidor}", bootstyle="success")
             self.log("✅ Conectado al servidor exitosamente")
             
             threading.Thread(target=self.recibir_mensajes, daemon=True).start()
@@ -408,7 +423,7 @@ class Cliente:
             self.socket_cliente.close()
             self.socket_cliente = None
         self.conectado = False
-        self.estado_label.config(text="Desconectado", foreground="red")
+        self.estado_label.config(text="⚫ Desconectado", bootstyle="danger")
         self.desbloquear_input()
             
     def ejecutar(self):

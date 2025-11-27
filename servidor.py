@@ -1,7 +1,9 @@
 import socket
 import threading
 import tkinter as tk
-from tkinter import ttk, scrolledtext, simpledialog, Toplevel, Label, filedialog, messagebox
+from tkinter import scrolledtext, simpledialog, Toplevel, Label, filedialog, messagebox
+import ttkbootstrap as ttk
+from ttkbootstrap.constants import *
 import json
 import base64
 import io
@@ -29,71 +31,135 @@ class Servidor:
             return "127.0.0.1"
         
     def crear_interfaz(self):
-        self.ventana = tk.Tk()
-        self.ventana.title("Servidor Maestro - Control Escolar")
-        self.ventana.geometry("950x650")
+        # Usar ttkbootstrap con tema Darkly (modo oscuro suave y agradable)
+        self.ventana = ttk.Window(themename="darkly")
+        self.ventana.title("🎓 Servidor Maestro - Control Escolar")
+        self.ventana.geometry("1200x850")
         
-        frame_info = ttk.LabelFrame(self.ventana, text="Estado del Servidor")
-        frame_info.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Label(frame_info, text=f"IP Local: {self.host} | Puerto: {self.port}").pack(side=tk.LEFT, padx=10)
-        self.estado_label = ttk.Label(frame_info, text="DETENIDO", foreground="red")
-        self.estado_label.pack(side=tk.RIGHT, padx=10)
+        # Estado del servidor con mejor diseño
+        frame_info = ttk.Labelframe(self.ventana, text="🖥️ Estado del Servidor", bootstyle="primary")
+        frame_info.pack(fill=tk.X, padx=15, pady=10)
         
+        ttk.Label(frame_info, text=f"🌐 IP Local: {self.host} | Puerto: {self.port}", 
+                 font=("Segoe UI", 13, "bold")).pack(side=tk.LEFT, padx=15, pady=10)
+        self.estado_label = ttk.Label(frame_info, text="⚫ DETENIDO", 
+                                     font=("Segoe UI", 13, "bold"), bootstyle="danger")
+        self.estado_label.pack(side=tk.RIGHT, padx=15, pady=8)
+        
+        # Botones principales con colores semánticos
         frame_main_btns = ttk.Frame(self.ventana)
-        frame_main_btns.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Button(frame_main_btns, text="▶ INICIAR SERVIDOR", command=self.iniciar_servidor).pack(side=tk.LEFT, padx=5)
-        ttk.Button(frame_main_btns, text="⏹ DETENER", command=self.detener_servidor).pack(side=tk.LEFT, padx=5)
+        frame_main_btns.pack(fill=tk.X, padx=15, pady=8)
         
-        paned = ttk.PanedWindow(self.ventana, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        btn_iniciar = ttk.Button(frame_main_btns, text="▶ INICIAR SERVIDOR", 
+                  command=self.iniciar_servidor, 
+                  bootstyle="success", width=22)
+        btn_iniciar.pack(side=tk.LEFT, padx=8)
+        btn_iniciar.configure(style="big.TButton")
         
+        btn_detener = ttk.Button(frame_main_btns, text="⏹ DETENER", 
+                  command=self.detener_servidor, 
+                  bootstyle="danger", width=22)
+        btn_detener.pack(side=tk.LEFT, padx=8)
+        btn_detener.configure(style="big.TButton")
+        
+        # Panel dividido con mejor espaciado
+        paned = ttk.Panedwindow(self.ventana, orient=tk.HORIZONTAL)
+        paned.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
+        
+        # Panel izquierdo
         frame_left = ttk.Frame(paned)
         paned.add(frame_left, weight=1)
         
-        ttk.Label(frame_left, text="Alumnos Conectados").pack(anchor=tk.W)
-        self.lista_clientes = tk.Listbox(frame_left, height=12)
-        self.lista_clientes.pack(fill=tk.X, padx=5, pady=2)
+        # Lista de alumnos con estilo
+        ttk.Label(frame_left, text="👥 Alumnos Conectados", 
+                 font=("Segoe UI", 12, "bold")).pack(anchor=tk.W, padx=5, pady=5)
+        self.lista_clientes = tk.Listbox(frame_left, height=8, 
+                                        font=("Consolas", 12),
+                                        bg="#1a1d23", fg="#00d4ff",
+                                        selectbackground="#0d6efd",
+                                        selectforeground="white")
+        self.lista_clientes.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Label(frame_left, text="Log de Eventos").pack(anchor=tk.W, pady=(10,0))
-        self.log_area = scrolledtext.ScrolledText(frame_left, height=12)
-        self.log_area.pack(fill=tk.BOTH, expand=True, padx=5, pady=2)
+        # Log de eventos con estilo hacker
+        ttk.Label(frame_left, text="📋 Log de Eventos", 
+                 font=("Segoe UI", 12, "bold")).pack(anchor=tk.W, padx=5, pady=(10,5))
+        self.log_area = scrolledtext.ScrolledText(frame_left, height=12,
+                                                  font=("Consolas", 11),
+                                                  bg="#1a1d23", fg="#00ff41",
+                                                  insertbackground="white")
+        self.log_area.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        frame_chat = ttk.LabelFrame(frame_left, text="Chat General (3.3)")
-        frame_chat.pack(fill=tk.X, padx=5, pady=5)
-        self.chat_entry = ttk.Entry(frame_chat)
-        self.chat_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5, pady=5)
-        self.chat_entry.bind('<Return>', self.enviar_mensaje_chat_servidor)
-        ttk.Button(frame_chat, text="Enviar", command=self.enviar_mensaje_chat_servidor).pack(side=tk.RIGHT, padx=5)
+        # Chat general con mejor diseño
+        frame_chat = ttk.Labelframe(frame_left, text="💬 Chat General", bootstyle="info")
+        frame_chat.pack(fill=tk.X, padx=5, pady=8)
         
-        frame_right = ttk.LabelFrame(paned, text="Comandos")
+        self.chat_entry = ttk.Entry(frame_chat, font=("Segoe UI", 12))
+        self.chat_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=8, pady=10)
+        self.chat_entry.bind('<Return>', self.enviar_mensaje_chat_servidor)
+        
+        ttk.Button(frame_chat, text="📤 Enviar", 
+                  command=self.enviar_mensaje_chat_servidor, 
+                  bootstyle="primary", width=14).pack(side=tk.RIGHT, padx=8, pady=10)
+        
+        # Panel derecho - Comandos organizados
+        frame_right = ttk.Labelframe(paned, text="🎛️ Panel de Control", bootstyle="secondary")
         paned.add(frame_right, weight=1)
         
-        lbl_vis = ttk.LabelFrame(frame_right, text="Visualización y Pantalla")
-        lbl_vis.pack(fill=tk.X, padx=5, pady=5)
+        # Sección Visualización
+        lbl_vis = ttk.Labelframe(frame_right, text="📺 Visualización y Pantalla", bootstyle="info")
+        lbl_vis.pack(fill=tk.X, padx=8, pady=8)
         
-        ttk.Button(lbl_vis, text="3.1 Ver Pantalla de Alumno", command=self.ver_pantalla_cliente).pack(fill=tk.X, padx=2, pady=2)
-        ttk.Button(lbl_vis, text="3.4 Exhibir Alumno a Alumno", command=self.exhibir_cliente).pack(fill=tk.X, padx=2, pady=2)
-        ttk.Button(lbl_vis, text="3.5 Mostrar SERVIDOR a Alumno", command=self.mostrar_servidor_a_cliente).pack(fill=tk.X, padx=2, pady=2)
-        ttk.Button(lbl_vis, text="⏹ Detener Transmisiones", command=self.detener_transmision).pack(fill=tk.X, padx=2, pady=2)
+        ttk.Button(lbl_vis, text="👁️ Ver Pantalla de Alumno", 
+                  command=self.ver_pantalla_cliente, 
+                  bootstyle="primary", width=32).pack(fill=tk.X, padx=6, pady=5)
+        ttk.Button(lbl_vis, text="📡 Exhibir Alumno a Alumno", 
+                  command=self.exhibir_cliente, 
+                  bootstyle="primary", width=32).pack(fill=tk.X, padx=6, pady=5)
+        ttk.Button(lbl_vis, text="🖥️ Mostrar SERVIDOR a Alumno", 
+                  command=self.mostrar_servidor_a_cliente, 
+                  bootstyle="primary", width=32).pack(fill=tk.X, padx=6, pady=5)
+        ttk.Button(lbl_vis, text="⏹ Detener Transmisiones", 
+                  command=self.detener_transmision, 
+                  bootstyle="warning", width=32).pack(fill=tk.X, padx=6, pady=5)
         
-        lbl_ctrl = ttk.LabelFrame(frame_right, text="Control Hardware")
-        lbl_ctrl.pack(fill=tk.X, padx=5, pady=5)
+        # Sección Control Hardware
+        lbl_ctrl = ttk.Labelframe(frame_right, text="🔧 Control Hardware", bootstyle="warning")
+        lbl_ctrl.pack(fill=tk.X, padx=8, pady=8)
         
-        ttk.Button(lbl_ctrl, text="3.6 Bloquear Input", command=lambda: self.enviar_comando_simple("bloquear_input")).pack(fill=tk.X, padx=2, pady=2)
-        ttk.Button(lbl_ctrl, text="3.7 Desbloquear Input", command=lambda: self.enviar_comando_simple("desbloquear_input")).pack(fill=tk.X, padx=2, pady=2)
-        ttk.Button(lbl_ctrl, text="3.8 Apagar Remoto", command=self.confirmar_apagado).pack(fill=tk.X, padx=2, pady=2)
+        ttk.Button(lbl_ctrl, text="🔒 Bloquear Input", 
+                  command=lambda: self.enviar_comando_simple("bloquear_input"), 
+                  bootstyle="danger", width=32).pack(fill=tk.X, padx=6, pady=5)
+        ttk.Button(lbl_ctrl, text="🔓 Desbloquear Input", 
+                  command=lambda: self.enviar_comando_simple("desbloquear_input"), 
+                  bootstyle="success", width=32).pack(fill=tk.X, padx=6, pady=5)
+        ttk.Button(lbl_ctrl, text="⚡ Apagar Remoto", 
+                  command=self.confirmar_apagado, 
+                  bootstyle="danger", width=32).pack(fill=tk.X, padx=6, pady=5)
         
-        lbl_net = ttk.LabelFrame(frame_right, text="Red y Restricciones")
-        lbl_net.pack(fill=tk.X, padx=5, pady=5)
+        # Sección Red y Restricciones
+        lbl_net = ttk.Labelframe(frame_right, text="🌐 Red y Restricciones", bootstyle="secondary")
+        lbl_net.pack(fill=tk.X, padx=8, pady=8)
         
-        ttk.Button(lbl_net, text="3.9 Bloquear Web", command=self.bloquear_web_dialogo).pack(fill=tk.X, padx=2, pady=2)
-        ttk.Button(lbl_net, text="3.9 Desbloquear Web", command=self.desbloquear_web_dialogo).pack(fill=tk.X, padx=2, pady=2)
-        ttk.Button(lbl_net, text="3.10 Bloquear Ping", command=lambda: self.control_ping("bloquear")).pack(fill=tk.X, padx=2, pady=2)
-        ttk.Button(lbl_net, text="3.10 Permitir Ping", command=lambda: self.control_ping("permitir")).pack(fill=tk.X, padx=2, pady=2)
+        ttk.Button(lbl_net, text="🚫 Bloquear Web", 
+                  command=self.bloquear_web_dialogo, 
+                  bootstyle="danger-outline", width=32).pack(fill=tk.X, padx=6, pady=5)
+        ttk.Button(lbl_net, text="✅ Desbloquear Web", 
+                  command=self.desbloquear_web_dialogo, 
+                  bootstyle="success-outline", width=32).pack(fill=tk.X, padx=6, pady=5)
+        ttk.Button(lbl_net, text="🛡️ Bloquear Ping", 
+                  command=lambda: self.control_ping("bloquear"), 
+                  bootstyle="danger-outline", width=32).pack(fill=tk.X, padx=6, pady=5)
+        ttk.Button(lbl_net, text="✅ Permitir Ping", 
+                  command=lambda: self.control_ping("permitir"), 
+                  bootstyle="success-outline", width=32).pack(fill=tk.X, padx=6, pady=5)
 
-        lbl_trans = ttk.LabelFrame(frame_right, text="Archivos (3.2)")
-        lbl_trans.pack(fill=tk.X, padx=5, pady=5)
-        ttk.Button(lbl_trans, text="Enviar Archivo a Todos", command=self.enviar_archivo_dialogo).pack(fill=tk.X, padx=2, pady=2)
+        # Sección Archivos
+        lbl_trans = ttk.Labelframe(frame_right, text="📁 Transferencia de Archivos", bootstyle="info")
+        lbl_trans.pack(fill=tk.X, padx=8, pady=8)
+        
+        ttk.Button(lbl_trans, text="📤 Enviar Archivo a Todos", 
+                  command=self.enviar_archivo_dialogo, 
+                  bootstyle="primary-outline", width=32).pack(fill=tk.X, padx=6, pady=5)
         
     def log(self, mensaje):
         self.log_area.insert(tk.END, f"{mensaje}\n")
@@ -106,7 +172,7 @@ class Servidor:
             self.socket_servidor.bind((self.host, self.port))
             self.socket_servidor.listen(5)
             
-            self.estado_label.config(text="EJECUTANDO", foreground="green")
+            self.estado_label.config(text="🟢 EJECUTANDO", bootstyle="success")
             self.log("✅ Servidor iniciado esperando conexiones...")
             threading.Thread(target=self.aceptar_conexiones, daemon=True).start()
         except Exception as e:
@@ -353,7 +419,7 @@ class Servidor:
         if self.socket_servidor:
             self.socket_servidor.close()
             self.socket_servidor = None
-        self.estado_label.config(text="DETENIDO", foreground="red")
+        self.estado_label.config(text="⚫ DETENIDO", bootstyle="danger")
         self.compartiendo_servidor = False
         sys.exit()
 
